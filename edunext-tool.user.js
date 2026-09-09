@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bypass + Unified AI - FPT EduNext
 // @namespace    http://tampermonkey.net/
-// @version      5.1
+// @version      5.2
 // @description  \ bypass, ] gửi AI (chuẩn OpenAI /api/v1), [ mở GUI - Refresh + API Key - đa nhà cung cấp
 // @match        https://fsc-edunext.fpt.edu.vn/*
 // @grant        GM_getValue
@@ -247,6 +247,8 @@
         panel.style.cssText='position:fixed;bottom:60px;right:15px;width:360px;background:#fff;color:#111;border:1px solid #ddd;border-radius:12px;z-index:2147483647;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,0.2);display:none;font-family:sans-serif;';
         panel.innerHTML=`
             <b style="font-size:15px">⚙️ AI Unified (OpenAI /api/v1)</b>
+            <div style="margin:10px 0 6px;font-size:12px">Tên nút</div>
+            <input id="gm-btn-name" placeholder="⚙️ AI" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box">
             <div style="margin:10px 0 6px;font-size:12px">Base URL - chuẩn https://.../api/v1</div>
             <input id="gm-base" placeholder="https://openrouter.ai/api/v1" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box">
             <div style="margin:10px 0 6px;font-size:12px">API Key</div>
@@ -268,6 +270,7 @@
             <div style="text-align:center;font-size:10px;color:#888;margin-top:6px">Chuẩn OpenAI: base + /chat/completions</div>
         `;
         document.body.appendChild(panel);
+        panel.querySelector('#gm-btn-name').value=get('ai_btn_name','⚙️ AI');
         panel.querySelector('#gm-base').value=get('ai_base','https://openrouter.ai/api/v1');
         panel.querySelector('#gm-key').value=get('ai_api_key','');
         panel.querySelector('#gm-prompt').value=get('ai_prompt','Giải bài tập cho tôi:');
@@ -275,12 +278,16 @@
         panel.querySelector('#gm-autopaste').checked=get('auto_paste',false);
         panel.querySelector('#gm-refresh').onclick=fetchModels;
         panel.querySelector('#gm-save').onclick=()=>{
+            const btnName=panel.querySelector('#gm-btn-name').value.trim()||'⚙️ AI';
+            set('ai_btn_name', btnName);
             set('ai_base', panel.querySelector('#gm-base').value.trim().replace(/\/$/,''));
             set('ai_api_key', panel.querySelector('#gm-key').value.trim());
             set('ai_model', panel.querySelector('#gm-model').value);
             set('ai_prompt', panel.querySelector('#gm-prompt').value.trim());
             set('ai_max_tokens', panel.querySelector('#gm-max').value.trim());
             set('auto_paste', panel.querySelector('#gm-autopaste').checked);
+            const btn=document.getElementById('ai-float-btn');
+            if(btn) btn.textContent=btnName;
             panel.querySelector('#gm-status').textContent='Đã lưu!';
             toast('Đã lưu',1500);
             setTimeout(()=>panel.querySelector('#gm-status').textContent='',1500);
@@ -289,7 +296,7 @@
         setTimeout(fetchModels,500);
     }
     function openPanel(){ if(!panel) createPanel(); panel.style.display=panel.style.display==='none'?'block':'none'; if(panel.style.display==='block') fetchModels(); }
-    function createBtn(){ const b=document.createElement('div'); b.textContent='⚙️ AI'; b.style.cssText='position:fixed;bottom:15px;right:15px;background:#009688;color:#fff;padding:8px 12px;border-radius:20px;z-index:2147483647;cursor:pointer;font-size:12px'; b.onclick=openPanel; document.body.appendChild(b); }
+    function createBtn(){ const b=document.createElement('div'); b.id='ai-float-btn'; b.textContent=get('ai_btn_name','⚙️ AI'); b.style.cssText='position:fixed;bottom:15px;right:15px;background:#009688;color:#fff;padding:8px 12px;border-radius:20px;z-index:2147483647;cursor:pointer;font-size:12px'; b.onclick=openPanel; document.body.appendChild(b); }
     window.addEventListener('load',()=>{createPanel();createBtn();});
     setTimeout(()=>{if(!document.getElementById('ai-panel')){createPanel();createBtn();}},2000);
     GM_registerMenuCommand('⚙️ AI Unified', openPanel);
