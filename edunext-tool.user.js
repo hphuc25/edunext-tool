@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bypass + Unified AI - FPT EduNext
 // @namespace    http://tampermonkey.net/
-// @version      5.2
+// @version      5.3
 // @description  \ bypass, ] gửi AI (chuẩn OpenAI /api/v1), [ mở GUI - Refresh + API Key - đa nhà cung cấp
 // @match        https://fsc-edunext.fpt.edu.vn/*
 // @grant        GM_getValue
@@ -218,12 +218,15 @@
     }
 
     document.addEventListener('keydown', e=>{
-        if(e.key==='\\' && !e.ctrlKey && !e.altKey) runBypass();
-        if(e.key===']' && !e.ctrlKey && !e.altKey){
+        const kBypass=get('ai_key_bypass','\\');
+        const kSend=get('ai_key_send',']');
+        const kToggle=get('ai_key_toggle','[');
+        if(e.key===kBypass && !e.ctrlKey && !e.altKey) runBypass();
+        if(e.key===kSend && !e.ctrlKey && !e.altKey){
             const sel=window.getSelection().toString();
             if(sel.trim().length>0){ savedText=sel; toast('Đã copy: '+sel.slice(0,40)+'... Đang gửi AI'); callAI(sel); }
         }
-        if(e.key==='[' && !e.ctrlKey && !e.altKey){ openPanel(); e.preventDefault(); }
+        if(e.key===kToggle && !e.ctrlKey && !e.altKey){ openPanel(); e.preventDefault(); }
     });
     document.addEventListener('click', e=>{
         const el=e.target.closest('input, textarea, [contenteditable="true"]');
@@ -247,8 +250,6 @@
         panel.style.cssText='position:fixed;bottom:60px;right:15px;width:360px;background:#fff;color:#111;border:1px solid #ddd;border-radius:12px;z-index:2147483647;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,0.2);display:none;font-family:sans-serif;';
         panel.innerHTML=`
             <b style="font-size:15px">⚙️ AI Unified (OpenAI /api/v1)</b>
-            <div style="margin:10px 0 6px;font-size:12px">Tên nút</div>
-            <input id="gm-btn-name" placeholder="⚙️ AI" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box">
             <div style="margin:10px 0 6px;font-size:12px">Base URL - chuẩn https://.../api/v1</div>
             <input id="gm-base" placeholder="https://openrouter.ai/api/v1" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box">
             <div style="margin:10px 0 6px;font-size:12px">API Key</div>
@@ -264,6 +265,19 @@
                 <div style="flex:1"><div style="font-size:11px;color:#555;margin-bottom:4px">Max tokens (0=auto)</div><input id="gm-max" type="number" min="0" max="8192" step="128" placeholder="1024" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box"></div>
                 <label style="display:flex;align-items:center;gap:6px;margin-top:18px;font-size:12px;white-space:nowrap"><input type="checkbox" id="gm-autopaste"> Tự dán</label>
             </div>
+            <details id="gm-setting" style="margin-top:12px;border:1px solid #e0e0e0;border-radius:8px;padding:8px;background:#fafafa">
+                <summary style="cursor:pointer;font-size:13px;font-weight:bold;list-style:none">⚙️ Setting</summary>
+                <div style="margin-top:10px">
+                    <div style="font-size:12px;margin-bottom:4px">Tên nút</div>
+                    <input id="gm-btn-name" placeholder="⚙️ AI" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box">
+                    <div style="font-size:12px;margin:10px 0 4px">Phím tắt (bấm vào ô rồi bấm phím)</div>
+                    <div style="display:flex;gap:6px">
+                        <div style="flex:1"><div style="font-size:11px;color:#555">Bypass</div><input id="gm-key-bypass" readonly placeholder="\\" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;text-align:center;cursor:pointer;background:#fff"></div>
+                        <div style="flex:1"><div style="font-size:11px;color:#555">Gửi AI</div><input id="gm-key-send" readonly placeholder="]" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;text-align:center;cursor:pointer;background:#fff"></div>
+                        <div style="flex:1"><div style="font-size:11px;color:#555">Mở GUI</div><input id="gm-key-toggle" readonly placeholder="[" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;text-align:center;cursor:pointer;background:#fff"></div>
+                    </div>
+                </div>
+            </details>
             <button id="gm-bypass" style="width:100%;margin-top:10px;padding:10px;background:#ff9800;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:bold">🔓 Bypass Paste</button>
             <button id="gm-save" style="width:100%;margin-top:8px;padding:10px;background:#1a73e8;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:bold">Lưu</button>
             <div id="gm-status" style="font-size:12px;color:green;margin-top:6px;text-align:center"></div>
@@ -276,10 +290,30 @@
         panel.querySelector('#gm-prompt').value=get('ai_prompt','Giải bài tập cho tôi:');
         panel.querySelector('#gm-max').value=get('ai_max_tokens','1024');
         panel.querySelector('#gm-autopaste').checked=get('auto_paste',false);
+        panel.querySelector('#gm-key-bypass').value=get('ai_key_bypass','\\');
+        panel.querySelector('#gm-key-send').value=get('ai_key_send',']');
+        panel.querySelector('#gm-key-toggle').value=get('ai_key_toggle','[');
+        const bindKey=(el)=>{
+            el.addEventListener('focus',()=> el.placeholder='Bấm phím...');
+            el.addEventListener('blur',()=> el.placeholder=el.id.includes('bypass')?'\\':el.id.includes('send')?']':'[');
+            el.addEventListener('keydown',(ev)=>{
+                ev.preventDefault();
+                if(ev.key==='Control'||ev.key==='Shift'||ev.key==='Alt') return;
+                el.value=ev.key;
+                el.blur();
+            });
+            el.addEventListener('click',()=> el.select());
+        };
+        bindKey(panel.querySelector('#gm-key-bypass'));
+        bindKey(panel.querySelector('#gm-key-send'));
+        bindKey(panel.querySelector('#gm-key-toggle'));
         panel.querySelector('#gm-refresh').onclick=fetchModels;
         panel.querySelector('#gm-save').onclick=()=>{
             const btnName=panel.querySelector('#gm-btn-name').value.trim()||'⚙️ AI';
             set('ai_btn_name', btnName);
+            set('ai_key_bypass', panel.querySelector('#gm-key-bypass').value||'\\');
+            set('ai_key_send', panel.querySelector('#gm-key-send').value||']');
+            set('ai_key_toggle', panel.querySelector('#gm-key-toggle').value||'[');
             set('ai_base', panel.querySelector('#gm-base').value.trim().replace(/\/$/,''));
             set('ai_api_key', panel.querySelector('#gm-key').value.trim());
             set('ai_model', panel.querySelector('#gm-model').value);
