@@ -10,6 +10,8 @@
 // @grant        GM_registerMenuCommand
 // @connect      *
 // @run-at       document-start
+// @downloadURL  https://raw.githubusercontent.com/hphuc25/edunext-tool/main/edunext-tool.user.js
+// @updateURL    https://raw.githubusercontent.com/hphuc25/edunext-tool/main/edunext-tool.user.js
 // ==/UserScript==
 
 (function() {

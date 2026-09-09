@@ -16,7 +16,9 @@ Tampermonkey cho `fsc-edunext.fpt.edu.vn` - Chuẩn `https://.../api/v1`
    - Firefox: https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/
    - https://www.tampermonkey.net/
 
-2. Copy `script.js` -> Tampermonkey Dashboard -> Create new script -> dán -> `Ctrl+S`
+2. Cài script (mở link là tự cài):
+   - **Cài 1 click:** https://raw.githubusercontent.com/hphuc25/edunext-tool/main/edunext-tool.user.js
+   - Hoặc copy `edunext-tool.user.js` -> Tampermonkey Dashboard -> Create new script -> dán -> `Ctrl+S`
 
 ## Lấy API Free
 
@@ -28,4 +30,4 @@ Tampermonkey cho `fsc-edunext.fpt.edu.vn` - Chuẩn `https://.../api/v1`
 
 Bôi đen câu hỏi -> bấm `]` -> chờ pop-up `AI đang xử lý` -> `✓ Đã xong` -> bấm `📋 Copy` -> `Ctrl+V`
 
-File duy nhất: `script.js`
+File: `edunext-tool.user.js` (mở link raw `.user.js` là Tampermonkey tự hiện Install)
