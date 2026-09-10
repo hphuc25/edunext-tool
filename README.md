@@ -17,6 +17,27 @@
    - **Cài 1 click:** https://raw.githubusercontent.com/hphuc25/edunext-tool/main/edunext-tool.user.js
    - Hoặc copy `edunext-tool.user.js` -> Tampermonkey Dashboard -> Create new script -> dán -> `Ctrl+S`
 
+   **Video hướng dẫn:**
+
+   <table>
+   <tr>
+   <td align="center"><b>HD Cài đặt</b></td>
+   <td align="center"><b>HD Sử dụng</b></td>
+   </tr>
+   <tr>
+   <td>
+   <video src="https://raw.githubusercontent.com/hphuc25/edunext-tool/main/install.mp4" controls width="400"></video>
+   <br>
+   <a href="./install.mp4">▶️ Xem HD Cài đặt</a>
+   </td>
+   <td>
+   <video src="https://raw.githubusercontent.com/hphuc25/edunext-tool/main/use.mp4" controls width="400"></video>
+   <br>
+   <a href="./use.mp4">▶️ Xem HD Sử dụng</a>
+   </td>
+   </tr>
+   </table>
+
 ## Lấy API Free
 
 - **OpenRouter (khuyên dùng):** https://openrouter.ai/keys - Base `https://openrouter.ai/api/v1` 
