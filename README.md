@@ -3,8 +3,10 @@
 ## Tính năng chính
 
 - `\` - Bypass chặn copy/paste
-- `]` - Bôi đen text -> gửi AI -> tự copy kết quả
+- `]` - Bấm -> **chọn phần tử trên trang** (text hoặc ảnh) -> gửi AI -> tự copy kết quả
 - `[` - Mở GUI cấu hình
+- `📷` - Nút nổi: chọn phần tử (ảnh -> OCR)
+- Ảnh được đọc chữ bằng **Tesseract.js** (chạy ngay trong trình duyệt)
 
 ## Cài đặt
 
@@ -46,6 +48,10 @@
 
 ## Dùng
 
-Bôi đen câu hỏi -> bấm `]` -> chờ pop-up `AI đang xử lý` -> `✓ Đã xong` -> bấm `📋 Copy` -> `Ctrl+V`
+1. Bấm `]` (hoặc nút `📷`) -> trỏ chuột qua phần tử cần lấy (sẽ hiện viền xanh) -> **click** để chọn. Bấm `ESC` để huỷ.
+2. Nếu chọn phần tử **chỉ có ảnh**, script tải Tesseract.js và **OCR** đọc chữ trong ảnh.
+3. Chờ pop-up `AI đang xử lý` -> `✓ Đã xong` -> bấm `📋 Copy` -> `Ctrl+V`.
+
+> Lưu ý: OCR lần đầu phải tải thư viện + data tiếng Việt (~1.4 MB) từ CDN, hơi lâu; lần sau dùng cache. Đổi ngôn ngữ OCR trong `Setting` -> `OCR language` (vd `vie`, `eng`).
 
 File: `edunext-tool.user.js` (mở link raw `.user.js` là Tampermonkey tự hiện Install)

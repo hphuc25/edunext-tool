@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Bypass + Unified AI - FPT EduNext
 // @namespace    http://tampermonkey.net/
-// @version      5.3
-// @description  \ bypass, ] gửi AI (chuẩn OpenAI /api/v1), [ mở GUI - Refresh + API Key - đa nhà cung cấp
+// @version      6.0
+// @description  \ bypass, ] chọn phần tử (text + ảnh -> OCR Tesseract) -> gửi AI, [ mở GUI - Refresh + API Key - đa nhà cung cấp
 // @match        https://fsc-edunext.fpt.edu.vn/*
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -27,6 +27,7 @@
         document.body.appendChild(d); setTimeout(()=>d.remove(),t);
     }
     let statusEl=null, statusTimer=null, currentRequest=null;
+    let statusBase='Đang suy nghĩ', statusFreeze=false;
     function ensureStatus(){
         if(statusEl) return statusEl;
         statusEl=document.createElement('div');
@@ -35,10 +36,12 @@
         document.body.appendChild(statusEl);
         return statusEl;
     }
-    function showStatusRunning(model){
+    function showStatusRunning(model, sub, title){
+        statusBase=sub||'Đang suy nghĩ';
+        statusFreeze=false;
         const el=ensureStatus();
         el.style.display='block';
-        el.innerHTML=`<div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border:2px solid #009688;border-top-color:transparent;border-radius:50%;display:inline-block;animation:ocSpin 0.8s linear infinite"></span><b>AI đang xử lý...</b><span style="margin-left:auto;font-size:10px;color:#888">${model}</span></div><div id="oc-status-text" style="margin-top:6px;color:#555;font-size:11px;white-space:pre-wrap;max-height:80px;overflow:hidden">Đang suy nghĩ, vui lòng chờ...</div><div style="margin-top:8px;text-align:right"><button id="oc-cancel" style="padding:6px 10px;background:#ff5252;color:#fff;border:0;border-radius:6px;cursor:pointer;font-size:11px">✕ Cancel</button></div>`;
+        el.innerHTML=`<div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border:2px solid #009688;border-top-color:transparent;border-radius:50%;display:inline-block;animation:ocSpin 0.8s linear infinite"></span><b>${title||'AI đang xử lý...'}</b><span style="margin-left:auto;font-size:10px;color:#888">${model}</span></div><div id="oc-status-text" style="margin-top:6px;color:#555;font-size:11px;white-space:pre-wrap;max-height:80px;overflow:hidden">${statusBase}</div><div style="margin-top:8px;text-align:right"><button id="oc-cancel" style="padding:6px 10px;background:#ff5252;color:#fff;border:0;border-radius:6px;cursor:pointer;font-size:11px">✕ Cancel</button></div>`;
         if(!document.getElementById('ocSpinStyle')){
             const s=document.createElement('style'); s.id='ocSpinStyle'; s.textContent='@keyframes ocSpin{to{transform:rotate(360deg)}}';
             document.head.appendChild(s);
@@ -53,8 +56,9 @@
         clearInterval(statusTimer);
         let dots=0;
         statusTimer=setInterval(()=>{
+            if(statusFreeze) return;
             const t=document.getElementById('oc-status-text');
-            if(t) t.textContent='Đang suy nghĩ' + '.'.repeat((dots++%3)+1);
+            if(t) t.textContent=statusBase + '.'.repeat((dots++%3)+1);
         },600);
     }
     function showStatusDone(result){
@@ -217,7 +221,210 @@
         send(maxTok);
     }
 
+    // ===== Chọn phần tử (pick mode) + OCR ảnh =====
+    let pickActive=false, pickHL=null, pickLast=null;
+    function isOurUI(el){
+        return !!(el && el.closest && el.closest('#ai-panel,#ai-float-btn,#ai-pick-btn,#opencode-status,#ai-pick-banner,#ai-pick-hl'));
+    }
+    function showPickBanner(){
+        removePickBanner();
+        const b=document.createElement('div');
+        b.id='ai-pick-banner';
+        b.style.cssText='position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#009688;color:#fff;padding:8px 16px;border-radius:20px;z-index:2147483647;font-size:13px;font-family:sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.25);white-space:nowrap';
+        b.textContent='\u{1F5B1}️ Chọn phần tử trên trang (ESC để huỷ)';
+        document.body.appendChild(b);
+    }
+    function removePickBanner(){ const b=document.getElementById('ai-pick-banner'); if(b) b.remove(); }
+    function clearPickHighlight(){ if(pickHL){ pickHL.remove(); pickHL=null; } }
+    function highlightPickTarget(el){
+        clearPickHighlight();
+        if(!el || el===document.body || el===document.documentElement) return;
+        const r=el.getBoundingClientRect();
+        if(r.width<3||r.height<3) return;
+        const d=document.createElement('div');
+        d.id='ai-pick-hl';
+        d.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border:2px solid #009688;background:rgba(0,150,136,.14);box-shadow:0 0 0 3px rgba(255,255,255,.8) inset;z-index:2147483646;pointer-events:none;box-sizing:border-box;border-radius:3px`;
+        document.body.appendChild(d);
+        pickHL=d;
+    }
+    function getPickTarget(el){
+        let cur=el, guard=0;
+        while(cur && cur!==document.body && cur!==document.documentElement && guard++<50){
+            if(isOurUI(cur)) return null;
+            const txt=(cur.innerText||'').trim();
+            const img = cur.matches && cur.matches('img') ? cur : (cur.querySelector ? cur.querySelector('img') : null);
+            if(txt || img) return cur;
+            cur=cur.parentElement;
+        }
+        return isOurUI(el)?null:el;
+    }
+    function enterPickMode(){
+        if(pickActive) return;
+        if(panel && panel.style.display==='block') panel.style.display='none';
+        pickActive=true;
+        if(!document.getElementById('ai-pick-style')){
+            const s=document.createElement('style'); s.id='ai-pick-style';
+            s.textContent='body.ai-picking, body.ai-picking *{cursor:crosshair!important}';
+            document.head.appendChild(s);
+        }
+        document.body.classList.add('ai-picking');
+        showPickBanner();
+        document.addEventListener('mousemove', onPickMove, true);
+        document.addEventListener('click', onPickClick, true);
+        document.addEventListener('keydown', onPickKey, true);
+        toast('Chọn phần tử trên trang (ESC để huỷ)',2500);
+    }
+    function exitPickMode(){
+        if(!pickActive) return;
+        pickActive=false;
+        pickLast=null;
+        document.body.classList.remove('ai-picking');
+        document.removeEventListener('mousemove', onPickMove, true);
+        document.removeEventListener('click', onPickClick, true);
+        document.removeEventListener('keydown', onPickKey, true);
+        clearPickHighlight();
+        removePickBanner();
+    }
+    function onPickMove(e){
+        const t=getPickTarget(e.target);
+        if(t===pickLast) return;
+        pickLast=t;
+        if(t) highlightPickTarget(t); else clearPickHighlight();
+    }
+    function onPickClick(e){
+        e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        const t=getPickTarget(e.target);
+        if(!t) return;
+        exitPickMode();
+        handlePick(t);
+    }
+    function onPickKey(e){
+        if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); exitPickMode(); toast('Đã huỷ',1200); }
+    }
+    function significantImage(img){
+        if(!img) return false;
+        const w=img.naturalWidth||img.width||0;
+        let dw=0; try{ dw=img.getBoundingClientRect().width; }catch(_){}
+        return w>=120 || dw>=120;
+    }
+    function findImage(el){
+        if(!el || !el.querySelector) return null;
+        if(el.matches && el.matches('img')) return el;
+        const imgs=[...el.querySelectorAll('img')];
+        return imgs.find(significantImage) || null;
+    }
+    function findBgImage(el){
+        try{
+            const r=el.getBoundingClientRect();
+            if(r.width<120||r.height<120) return null;
+            const bg=getComputedStyle(el).backgroundImage;
+            const m=/url\(["']?([^"')]+)["']?\)/.exec(bg);
+            return m?m[1]:null;
+        }catch(_){ return null; }
+    }
+    async function handlePick(el){
+        if(!el || el===document.body || el===document.documentElement){ toast('Không có nội dung để chọn',2000); return; }
+        const text=(el.innerText||el.textContent||'').replace(/\n{3,}/g,'\n\n').trim();
+        const img=findImage(el);
+        const bg=img?null:findBgImage(el);
+        if(!text && !img && !bg){ toast('Phần tử không có nội dung',2000); return; }
+        let ocrText='';
+        if(img || bg){
+            try{
+                showStatusRunning('OCR','Đang đọc ảnh...','Đang OCR...');
+                ocrText=await ocrUrl(img ? (img.currentSrc||img.src) : bg);
+            }catch(e){
+                showStatusError('Lỗi OCR: '+e.message); toast('Lỗi OCR: '+e.message,4500); return;
+            }
+        }
+        let combined=text;
+        if(ocrText) combined=(combined?combined+'\n\n':'')+'[OCR ảnh]\n'+ocrText;
+        if(!combined.trim()){ toast('Không đọc được nội dung',2500); return; }
+        callAI(combined);
+    }
+
+    // ===== Tesseract.js OCR =====
+    let tesseractPromise=null;
+    function ensureTesseract(){
+        if(window.Tesseract && window.Tesseract.createWorker) return Promise.resolve(window.Tesseract);
+        if(tesseractPromise) return tesseractPromise;
+        tesseractPromise=injectTesseractScript().catch(()=>loadTesseractViaEval());
+        return tesseractPromise;
+    }
+    function injectTesseractScript(){
+        return new Promise((resolve,reject)=>{
+            const s=document.createElement('script');
+            s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+            let done=false;
+            const to=setTimeout(()=>{ if(done)return; done=true; tesseractPromise=null; reject(new Error('Tải Tesseract.js quá lâu')); },20000);
+            s.onload=()=>{ if(done)return; done=true; clearTimeout(to); resolve(window.Tesseract); };
+            s.onerror=()=>{ if(done)return; done=true; clearTimeout(to); tesseractPromise=null; reject(new Error('Không tải được Tesseract.js')); };
+            (document.head||document.documentElement).appendChild(s);
+        });
+    }
+    function loadTesseractViaEval(){
+        return new Promise((resolve,reject)=>{
+            GM_xmlhttpRequest({
+                method:'GET',
+                url:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
+                responseType:'text',
+                onload:r=>{
+                    if(r.status!==200){ tesseractPromise=null; reject(new Error('HTTP '+r.status)); return; }
+                    try{ (0,eval)(r.responseText); if(window.Tesseract) resolve(window.Tesseract); else { tesseractPromise=null; reject(new Error('Tesseract không khởi tạo')); } }
+                    catch(e){ tesseractPromise=null; reject(e); }
+                },
+                onerror:()=>{ tesseractPromise=null; reject(new Error('Lỗi tải Tesseract.js')); }
+            });
+        });
+    }
+    function ocrLangPath(lang){
+        const custom=get('ocr_lang_path','').trim();
+        if(custom) return custom.replace(/\/$/,'');
+        const first=(lang||'vie').split('+')[0].trim()||'vie';
+        return 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/'+first+'/4.0.0_best_int';
+    }
+    let ocrWorker=null, ocrWorkerLang=null;
+    async function getOcrWorker(){
+        const lang=(get('ocr_lang','vie')||'vie').trim()||'vie';
+        const T=await ensureTesseract();
+        if(ocrWorker && ocrWorkerLang===lang) return ocrWorker;
+        if(ocrWorker){ try{ await ocrWorker.terminate(); }catch(_){} ocrWorker=null; }
+        ocrWorkerLang=lang;
+        ocrWorker=await T.createWorker(lang, 1, {
+            langPath: ocrLangPath(lang),
+            corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5',
+            workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+            logger: m=>{ if(m && m.status==='recognizing text' && m.progress!=null){ statusFreeze=true; const t=document.getElementById('oc-status-text'); if(t) t.textContent='Đang OCR '+Math.round(m.progress*100)+'%'; } }
+        });
+        return ocrWorker;
+    }
+    function fetchBlob(url){
+        return new Promise((resolve,reject)=>{
+            GM_xmlhttpRequest({
+                method:'GET', url, responseType:'blob',
+                onload:r=>{ if(r.status===200 && r.response) resolve(r.response); else reject(new Error('HTTP '+r.status)); },
+                onerror:()=>reject(new Error('Lỗi tải ảnh'))
+            });
+        });
+    }
+    async function ocrUrl(src){
+        if(!src) throw new Error('Thiếu src');
+        let input=src;
+        if(!/^data:/i.test(src)){
+            const blob=await fetchBlob(src);
+            input=URL.createObjectURL(blob);
+        }
+        try{
+            const worker=await getOcrWorker();
+            const { data }=await worker.recognize(input);
+            return ((data&&data.text)||'').trim();
+        }finally{
+            if(input!==src) URL.revokeObjectURL(input);
+        }
+    }
+
     document.addEventListener('keydown', e=>{
+        if(pickActive) return;
         const kBypass=get('ai_key_bypass','\\');
         const kSend=get('ai_key_send',']');
         const kToggle=get('ai_key_toggle','[');
@@ -225,10 +432,12 @@
         if(e.key===kSend && !e.ctrlKey && !e.altKey){
             const sel=window.getSelection().toString();
             if(sel.trim().length>0){ savedText=sel; toast('Đã copy: '+sel.slice(0,40)+'... Đang gửi AI'); callAI(sel); }
+            else enterPickMode();
         }
         if(e.key===kToggle && !e.ctrlKey && !e.altKey){ openPanel(); e.preventDefault(); }
     });
     document.addEventListener('click', e=>{
+        if(pickActive) return;
         const el=e.target.closest('input, textarea, [contenteditable="true"]');
         if(el && savedText && get('auto_paste',false)){
             setTimeout(()=>{
@@ -276,8 +485,11 @@
                         <div style="flex:1"><div style="font-size:11px;color:#555">Gửi AI</div><input id="gm-key-send" readonly placeholder="]" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;text-align:center;cursor:pointer;background:#fff"></div>
                         <div style="flex:1"><div style="font-size:11px;color:#555">Mở GUI</div><input id="gm-key-toggle" readonly placeholder="[" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;text-align:center;cursor:pointer;background:#fff"></div>
                     </div>
+                    <div style="font-size:12px;margin:10px 0 4px">OCR language (vd: vie, eng)</div>
+                    <input id="gm-ocr-lang" placeholder="vie" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box">
                 </div>
             </details>
+            <button id="gm-pick" style="width:100%;margin-top:12px;padding:10px;background:#009688;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:bold">📷 Chọn phần tử (ảnh -> OCR)</button>
             <button id="gm-bypass" style="width:100%;margin-top:10px;padding:10px;background:#ff9800;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:bold">🔓 Bypass Paste</button>
             <button id="gm-save" style="width:100%;margin-top:8px;padding:10px;background:#1a73e8;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:bold">Lưu</button>
             <div id="gm-status" style="font-size:12px;color:green;margin-top:6px;text-align:center"></div>
@@ -293,6 +505,7 @@
         panel.querySelector('#gm-key-bypass').value=get('ai_key_bypass','\\');
         panel.querySelector('#gm-key-send').value=get('ai_key_send',']');
         panel.querySelector('#gm-key-toggle').value=get('ai_key_toggle','[');
+        panel.querySelector('#gm-ocr-lang').value=get('ocr_lang','vie');
         const bindKey=(el)=>{
             el.addEventListener('focus',()=> el.placeholder='Bấm phím...');
             el.addEventListener('blur',()=> el.placeholder=el.id.includes('bypass')?'\\':el.id.includes('send')?']':'[');
@@ -320,6 +533,7 @@
             set('ai_prompt', panel.querySelector('#gm-prompt').value.trim());
             set('ai_max_tokens', panel.querySelector('#gm-max').value.trim());
             set('auto_paste', panel.querySelector('#gm-autopaste').checked);
+            set('ocr_lang', panel.querySelector('#gm-ocr-lang').value.trim()||'vie');
             const btn=document.getElementById('ai-float-btn');
             if(btn) btn.textContent=btnName;
             panel.querySelector('#gm-status').textContent='Đã lưu!';
@@ -327,11 +541,14 @@
             setTimeout(()=>panel.querySelector('#gm-status').textContent='',1500);
         };
         panel.querySelector('#gm-bypass').onclick=()=>runBypass();
+        panel.querySelector('#gm-pick').onclick=()=>{ panel.style.display='none'; enterPickMode(); };
         setTimeout(fetchModels,500);
     }
     function openPanel(){ if(!panel) createPanel(); panel.style.display=panel.style.display==='none'?'block':'none'; if(panel.style.display==='block') fetchModels(); }
     function createBtn(){ const b=document.createElement('div'); b.id='ai-float-btn'; b.textContent=get('ai_btn_name','⚙️ AI'); b.style.cssText='position:fixed;bottom:15px;right:15px;background:#009688;color:#fff;padding:8px 12px;border-radius:20px;z-index:2147483647;cursor:pointer;font-size:12px'; b.onclick=openPanel; document.body.appendChild(b); }
-    window.addEventListener('load',()=>{createPanel();createBtn();});
-    setTimeout(()=>{if(!document.getElementById('ai-panel')){createPanel();createBtn();}},2000);
+    function createPickBtn(){ const b=document.createElement('div'); b.id='ai-pick-btn'; b.textContent='\u{1F4F7}'; b.title='Chọn phần tử (ảnh -> OCR)'; b.style.cssText='position:fixed;bottom:15px;right:80px;background:#009688;color:#fff;padding:8px 12px;border-radius:20px;z-index:2147483647;cursor:pointer;font-size:12px'; b.onclick=enterPickMode; document.body.appendChild(b); }
+    window.addEventListener('load',()=>{createPanel();createBtn();createPickBtn();});
+    setTimeout(()=>{if(!document.getElementById('ai-panel')){createPanel();createBtn();createPickBtn();}},2000);
     GM_registerMenuCommand('⚙️ AI Unified', openPanel);
+    GM_registerMenuCommand('\u{1F4F7} Chọn phần tử (OCR)', enterPickMode);
 })();
